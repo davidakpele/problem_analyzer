@@ -275,21 +275,45 @@ class Speaker:
                 for v in raw:
                     name = v.name if v.name else v.id.split("\\")[-1]
                     self.voices.append((name, v.id))
-                if self.voices:
-                    self.voice_id = self.voices[0][1]
+
+                # ── Auto-select male voice ────────────────────────────────
+                # Common Windows male SAPI voices: David, Mark, George, Ravi
+                MALE_KEYWORDS  = ("david", "mark", "george", "ravi", "james",
+                                  "male", "man", "guy")
+                FEMALE_KEYWORDS = ("zira", "hazel", "susan", "female", "woman",
+                                   "girl", "linda", "helen")
+
+                male_vid = None
+                for name, vid in self.voices:
+                    n = name.lower()
+                    if any(k in n for k in MALE_KEYWORDS):
+                        male_vid = vid
+                        break
+
+                # Fallback: pick first voice that is NOT female
+                if male_vid is None:
+                    for name, vid in self.voices:
+                        n = name.lower()
+                        if not any(k in n for k in FEMALE_KEYWORDS):
+                            male_vid = vid
+                            break
+
+                self.voice_id = male_vid if male_vid else (self.voices[0][1] if self.voices else None)
+                # ─────────────────────────────────────────────────────────
+
             except Exception:
                 pass
         elif self._engine in ("espeak-ng", "espeak"):
             self.voices = [
-                ("English (default)", "en"),
                 ("English male 1",    "en+m1"),
                 ("English male 2",    "en+m2"),
                 ("English male 3",    "en+m3"),
+                ("English male 4",    "en+m4"),
+                ("English (default)", "en"),
                 ("English female 1",  "en+f1"),
                 ("English female 2",  "en+f2"),
-                ("English (slow)",    "en+m4"),
             ]
-            self.voice_id = "en"
+            self.voice_id = "en+m1"   # default to male 1
 
     def _worker(self):
         while True:
@@ -494,7 +518,12 @@ class App(tk.Tk):
 
         if voices:
             voice_names = [name for name, _ in voices]
-            self.voice_var.set(voice_names[0])
+            # Set dropdown to match the auto-selected voice
+            selected_name = next(
+                (name for name, vid in voices if vid == self.speaker.voice_id),
+                voice_names[0]
+            )
+            self.voice_var.set(selected_name)
             style = ttk.Style()
             style.theme_use("default")
             style.configure("Dark.TCombobox",
